@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Results{% endblock %}
+
+{% block content %}
+{% if not result %}
+<section class="panel text-center mt-4">
+  <h2>No results yet</h2>
+  <p>Analyse a claim first and the results will appear here.</p>
+  <a href="{{ url_for('index') }}" class="btn btn-primary">Analyse a claim</a>
+</section>
+{% else %}
+{# Safety rule: no evidence means we cannot Support or Refute a claim #}
+{% set no_evidence = not result.evidence %}
+{% set label = 'Insufficient Information' if no_evidence else result.classification %}
+{% set v = 'supported' if label == 'Supported' else ('refuted' if label == 'Refuted' else 'insufficient') %}
+<div id="results" data-verdict="{{ v }}" class="mt-4">
+
+  <div class="verdict-banner">
+    <div class="verdict-main">
+      <i class="verdict-icon bi {{ 'bi-check-circle-fill' if v == 'supported' else ('bi-x-octagon-fill' if v == 'refuted' else 'bi-question-circle-fill') }}"></i>
+      <div>
+        <div class="small verdict-label">Classification</div>
+        <div class="verdict-text">{{ label }}</div>
+      </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-light" href="{{ url_for('download', analysis_id=result.id) }}"><i class="bi bi-download"></i> Download Report</a>
+      <a class="btn btn-outline-light" href="{{ url_for('index') }}"><i class="bi bi-arrow-repeat"></i> Analyse another</a>
+    </div>
+  </div>
+
+  <div class="panel mt-4">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <h3><i class="bi bi-chat-quote"></i>Submitted claim</h3>
+      <button class="btn btn-sm btn-outline-secondary" id="copyBtn" type="button"><i class="bi bi-clipboard"></i> Copy</button>
+    </div>
+    <p class="mb-0" id="claimCopy">{{ claim }}</p>
+  </div>
+
+  <div class="row g-4 mt-0">
+    <div class="col-lg-4">
+      <div class="panel h-100">
+        <h3><i class="bi bi-speedometer2"></i>Matching score</h3>
+        {% set pct = (result.score * 100)|round|int %}
+        <div class="gauge" data-score="{{ pct }}" role="img" aria-label="Matching score {{ pct }} percent">
+          <svg viewBox="0 0 120 120" width="170" height="170"><circle class="track" cx="60" cy="60" r="52" fill="none" stroke-width="12"/><circle class="bar" cx="60" cy="60" r="52" fill="none" stroke-width="12" stroke-dasharray="326.7" stroke-dashoffset="326.7"/></svg>
+          <div class="score-num"><div><span id="scoreNum">0</span><span class="pct">%</span></div></div>
+        </div>
+        <p class="small text-muted mt-2 mb-0 text-center">How closely the claim matches the evidence found. It is not the probability that the claim is true.</p>
+      </div>
+    </div>
+    <div class="col-lg-8">
+      <div class="panel h-100">
+        <h3><i class="bi bi-chat-left-text"></i>Explanation</h3>
+        <p class="mb-0">{% if no_evidence and result.classification != 'Insufficient Information' %}No sufficiently similar evidence was found, so this claim cannot be confirmed or refuted.{% else %}{{ result.explanation }}{% endif %}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel evidence-panel mt-4">
+    <h3><i class="bi bi-journal-check"></i>Matching evidence {% if not no_evidence %}<span class="small text-muted">({{ result.evidence|length }})</span>{% endif %}</h3>
+    {% for ev in result.evidence %}
+      <div class="evidence">
+        <div class="num">{{ loop.index }}</div>
+        <div class="body">
+          <div>{{ ev.text }}</div>
+          <div class="meta">
+            <span class="tag"><i class="bi bi-book"></i> {{ ev.source or 'Unknown source' }}</span>
+            {% if ev.score is not none %}<span class="tag">Match {{ (ev.score * 100)|round|int }}%</span>{% endif %}
+            {% if ev.url %}<a href="{{ ev.url }}" target="_blank" rel="noopener">View source <i class="bi bi-box-arrow-up-right"></i></a>{% endif %}
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <i class="bi bi-search-heart"></i>
+        <h4>No matching evidence found</h4>
+        <p>We couldn't find anything in the dataset that is similar enough to this claim, so we can't say whether it is true or false. Try rewording it, or add details such as names, places or dates.</p>
+        <a href="{{ url_for('index') }}" class="btn btn-primary"><i class="bi bi-pencil-square"></i> Try another claim</a>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="panel mt-4">
+    <h3><i class="bi bi-highlighter"></i>Keywords and entities</h3>
+    <p class="small text-muted mb-2">Click a label to show or hide that highlight.</p>
+    <div class="legend mb-3">
+      <button type="button" class="ent ent-person" data-type="person" aria-pressed="true">Person<span class="count">0</span></button>
+      <button type="button" class="ent ent-location" data-type="location" aria-pressed="true">Location<span class="count">0</span></button>
+      <button type="button" class="ent ent-org" data-type="org" aria-pressed="true">Organisation<span class="count">0</span></button>
+      <button type="button" class="ent ent-date" data-type="date" aria-pressed="true">Date<span class="count">0</span></button>
+      <button type="button" class="ent ent-keyword" data-type="keyword" aria-pressed="true">Keyword<span class="count">0</span></button>
+    </div>
+    <p id="highlightedText" class="highlighted">{{ claim }}</p>
+  </div>
+</div>
+
+<script type="application/json" id="resultData">{{ {"claim": claim, "entities": result.entities, "keywords": result.keywords}|tojson }}</script>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}{% if result %}<script>renderHighlights(); initGauge(); initCopy();</script>{% endif %}{% endblock %}
